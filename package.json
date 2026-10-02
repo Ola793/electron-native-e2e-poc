@@ -1,0 +1,31 @@
+{
+  "name": "electron-native-e2e-poc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PoC: E2E tests for a hybrid Electron + native Windows app (Playwright + Windows UI Automation)",
+  "main": "app/main.js",
+  "scripts": {
+    "build:native": "powershell -NoProfile -ExecutionPolicy Bypass -File native/build.ps1",
+    "app": "electron .",
+    "test": "playwright test --workers=1",
+    "test:electron": "playwright test --project=electron",
+    "test:desktop": "playwright test --project=desktop",
+    "show:report": "playwright show-report",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write --ignore-unknown app lib pages tests playwright.config.ts"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^22.20.5",
+    "appium": "3.8.0",
+    "appium-novawindows-driver": "1.4.5",
+    "electron": "44.5.1",
+    "prettier": "^3.9.9",
+    "typescript": "^7.0.2",
+    "webdriverio": "9.32.0"
+  }
+}

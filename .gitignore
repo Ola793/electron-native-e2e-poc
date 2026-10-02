@@ -1,0 +1,9 @@
+node_modules/
+native/bin/
+dist/
+playwright-artifacts/
+playwright-report/
+test-results/
+logs/
+.env
+CLAUDE.local.md

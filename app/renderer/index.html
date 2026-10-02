@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+    <title>Hybrid Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Hybrid Demo</h1>
+
+      <section aria-labelledby="notes-heading">
+        <h2 id="notes-heading">Notes</h2>
+        <form id="note-form">
+          <label for="note-input">Note</label>
+          <input id="note-input" type="text" autocomplete="off" />
+          <button type="submit">Add note</button>
+          <button type="button" id="clear-notes">Clear notes…</button>
+        </form>
+        <ul id="notes" aria-label="Notes"></ul>
+      </section>
+
+      <section aria-labelledby="file-heading">
+        <h2 id="file-heading">File</h2>
+        <button type="button" id="open-file">Open file…</button>
+        <p>Selected file: <output id="selected-file" aria-label="Selected file">none</output></p>
+        <pre id="file-content" role="region" aria-label="File content"></pre>
+      </section>
+
+      <section aria-labelledby="panel-heading">
+        <h2 id="panel-heading">Native panel</h2>
+        <div class="row">
+          <button type="button" id="open-panel">Open native panel</button>
+          <button type="button" id="dock-panel">Dock native panel</button>
+          <button type="button" id="close-panel" disabled>Close native panel</button>
+        </div>
+        <p>Native panel: <output id="panel-state" aria-label="Native panel state">closed</output></p>
+        <div class="row">
+          <label for="panel-message">Message for native panel</label>
+          <input id="panel-message" type="text" autocomplete="off" />
+          <button type="button" id="send-to-panel" disabled>Send to native panel</button>
+        </div>
+        <p>
+          Last message from native panel:
+          <output id="panel-received" aria-label="Message from native panel">none</output>
+        </p>
+        <div id="native-dock" aria-hidden="true"></div>
+      </section>
+    </main>
+    <script src="renderer.js"></script>
+  </body>
+</html>

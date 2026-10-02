@@ -1,0 +1,66 @@
+# Two jobs, because native UI tests need the desktop to themselves: a window opened by a parallel
+# Electron test can cover the native dialog a desktop test is working with.
+name: e2e
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  electron:
+    name: Electron tests (parallel)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Electron 42+ downloads its binary on first use, not during npm install.
+      - run: npx install-electron --no
+      - run: npm run build:native
+      - run: npm run test:electron
+        env:
+          CI: "true"
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: report-electron
+          path: |
+            playwright-report/
+            playwright-artifacts/
+          retention-days: 14
+
+  desktop:
+    name: Desktop tests (native UI, serial)
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # Hosted runners start at 1024x768, which is too small for the app window plus a native dialog.
+      - name: Set display resolution
+        shell: powershell
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+      - run: npm ci
+      - run: npx install-electron --no
+      - run: npm run build:native
+      - run: npm run test:desktop
+        env:
+          CI: "true"
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: report-desktop
+          path: |
+            playwright-report/
+            playwright-artifacts/
+            logs/
+          retention-days: 14
