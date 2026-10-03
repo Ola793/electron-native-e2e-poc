@@ -101,11 +101,11 @@ scenarios, but speed has to be re-measured on the real app with its larger eleme
   build has the `EnableNodeCliInspectArguments` fuse disabled, the launch fails. The Electron Forge template disables
   this fuse by default; electron-builder does not touch fuses unless configured to. **This is the first question
   for the developers.**
-- A possible workaround if the fuse is off and no test build is offered: start the exe with
-  `--remote-debugging-port` and attach with `chromium.connectOverCDP`. Only renderer windows work; there is no
-  access to the main process, and therefore no dialog stubs. **Unconfirmed:** the only source is one pull request
-  in a little-known repository, and the Electron docs do not say whether the fuse affects this switch. Try it on
-  the real build.
+- The workaround if the fuse is off and no test build is offered: start the exe with `--remote-debugging-port`
+  and attach with `chromium.connectOverCDP`. Only renderer windows work; there is no access to the main process,
+  and therefore no dialog stubs. The sources for this are thin (one pull request in a little-known repository, and
+  the Electron docs do not say whether the fuse affects this switch), so it was tried hands-on: see "Packaged
+  build and the inspect fuse" below.
 - The synchronous dialog variants (`showOpenDialogSync`, `showMessageBoxSync`) block the main process: while such a
   dialog is open, `electronApp.evaluate` cannot run, and only the native driver can close the dialog.
 - Since Electron 43 the file dialog opens in Downloads by default and does not remember the last folder.
@@ -136,6 +136,33 @@ scenarios, but speed has to be re-measured on the real app with its larger eleme
 - `session.execute("windows: ...", element)` does not wait for the element to appear (unlike `click()` and
   `getText()`), so the wait was added in `lib/native-driver.ts`.
 
+### Packaged build and the inspect fuse [verified]
+
+The demo app was packaged with `@electron/packager` 20.3.0 (Electron 44.5.1) in two variants: fuses as packaged
+(inspect fuse on) and with `EnableNodeCliInspectArguments` switched off by `@electron/fuses` 2.1.3. This was a
+separate trial; the packaging is not part of the repository.
+
+| Build | `_electron.launch({ executablePath })` | Attach over CDP |
+| ----- | -------------------------------------- | --------------- |
+| Fuse on | Works: window, main-process `evaluate`, dialog stubs | Not needed |
+| Fuse off | Fails: the launch times out | Works, see below |
+
+With the fuse off, the app was started with `--remote-debugging-port=<port>` and Playwright attached with
+`chromium.connectOverCDP`. The fuse does not affect that switch. Over CDP the following worked:
+
+- locators, clicks, assertions, screenshots and tracing in the renderer;
+- the hybrid handover without the main process: the app is started by the test, so its real process id is known,
+  and UI Automation finds the window by that id;
+- the real open-file dialog and the real message box, driven through UI Automation.
+
+What is lost with the fuse off: everything that needs the main process. Dialogs cannot be stubbed, so every
+dialog has to be driven for real through UI Automation. That makes more tests depend on the desktop, so fewer of
+them can run in parallel. The application menu was not tried in this mode: it can no longer be clicked from the
+main process and this driver does not see it, which leaves keyboard shortcuts as the likely route.
+
+The attach worked both with a separate user-data directory and with the default one. A product can still strip
+or block the debugging switch in its own code, so this has to be repeated on the real build.
+
 ## 4. Native side: driver comparison
 
 | Tool | Status [sources] | Requirements | Verdict |
@@ -145,6 +172,7 @@ scenarios, but speed has to be re-measured on the real app with its larger eleme
 | **appium-novawindows-driver** | 1.4.5 on 2026-08-27. Recommended in the Appium docs as the replacement. A young project with essentially one maintainer; version 2.0 with a C# backend is still in preview | Appium 3, Node >= 20.19. No WinAppDriver, no Developer Mode, no .NET | **Chosen. [verified]** |
 | **FlaUI** (C#) | The most mature library (5.0.0, 2025-02-25, repository active) | .NET SDK, tests in C# | A second language and runner; from C# Electron is reachable only over CDP |
 | **FlaUI.WebDriver** | 0.4.0 on 2025-07-22, calls itself experimental, no commits since July 2025 | One self-contained exe, no .NET and no admin rights | **Fallback. [verified]** |
+| **appium-flaui-driver** | 0.0.4, last published 2024-07-01; a community Appium driver on FlaUI | Appium | Not evaluated; too early a version to build on |
 | **pywinauto** | 0.6.9 on 2025-01-06, compatibility with Python 3.14 not confirmed | Python | A third language, not considered |
 | **winapp CLI** (`winapp ui`, Microsoft) | 0.7.1 on 2026-10-01, public preview; UIA commands with JSON output | npm or winget | Worth watching; still a preview and one process per command |
 | nut.js, robotjs | Coordinate clicks; prebuilt nut.js packages are paid | - | Do not use |
@@ -243,7 +271,7 @@ This is a handful of runs, not statistics: stability on the runner still has to 
 
 | Risk | What to do |
 | ---- | ---------- |
-| The packaged build of the product has the `EnableNodeCliInspectArguments` fuse disabled | Check with `npx @electron/fuses read --app <exe>`. Ask for a test build with the fuse on. The CDP workaround is unconfirmed and has to be tried on the real build |
+| The packaged build of the product has the `EnableNodeCliInspectArguments` fuse disabled | Check with `npx @electron/fuses read --app <exe>`. Ask for a test build with the fuse on. Otherwise attach over CDP: it worked on the packaged demo app, at the cost of losing dialog stubs and main-process access (section 3) |
 | NovaWindows is a young project with one maintainer | All access to the driver is in one file (`lib/native-driver.ts`); the same scenarios pass on FlaUI.WebDriver, and switching means rewriting that file and the server launcher |
 | A native component runs elevated | A normal process cannot drive elevated windows (UIPI). Find out from the developers |
 | Native controls have no AutomationId | Ask for them to be added; until then the locators are fragile |
@@ -265,7 +293,11 @@ This is a handful of runs, not statistics: stability on the runner still has to 
 ## 10. Sources
 
 No article was found that covers exactly "Electron + native Windows windows in one suite": the solution is put
-together from three well-documented parts. Three Medium articles could not be opened (HTTP 403) and are not listed.
+together from three well-documented parts.
+
+Medium answers automated requests with HTTP 403, so its articles were read from Internet Archive snapshots; they
+are listed in their own group below. Each one was read in full and checked a second time against its text, unless
+marked otherwise. About fifty other promising Medium links had no archived copy and could not be read.
 
 **Electron and Playwright**
 
@@ -301,6 +333,29 @@ together from three well-documented parts. Three Medium articles could not be op
 - [Playwright + Appium + WebdriverIO, Habr, Fix Price](https://habr.com/ru/companies/fix_price/articles/1020244/) (2026-04-07) - the same two-driver idea on Android.
 - [TTC Global: Playwright and FlaUI.WebDriver](https://ttcglobal.com/what-we-think/blog/playwright-selenium-desktop-application-automation-testing) (2024-06-18).
 - [qavajs/playwright-wdio-fixtures](https://github.com/qavajs/playwright-wdio-fixtures) - ready-made WebdriverIO fixtures for Playwright Test.
+
+**Medium articles**
+
+None of them changes the conclusions; most confirm them from practice, and the newest ones are about Appium 3.
+Tutorials older than 2023 are built on WinAppDriver and are listed for the problems they document, not as a setup
+to copy.
+
+- [Testing Electron Apps with Playwright, Kubeshop](https://medium.com/kubeshop-i/testing-electron-apps-with-playwright-kubeshop-839ff27cf376) (2022-04-14) - the same article as the dev.to copy above: tests launch the packaged build, a synchronous file dialog is bypassed through an IPC handler set from the test, CI on Windows and macOS runners.
+- [Running Android Application Tests Using Playwright Test Runner with Appium + WebdriverIO, Sinan Akdaş](https://medium.com/@sakdas/running-android-application-tests-using-playwright-test-runner-with-appium-webdriverio-e52b4fc03c7d) (2025-07-21) - Playwright Test as the runner for a WebdriverIO session against Appium, the same runner and client pairing as here; Android only.
+- [How to use python selenium to test an Electron app, Chasee](https://medium.com/@chasethesun/how-to-use-python-selenium-to-test-an-electron-app-ffe01f170ddc) (2021-09-30) - attaching to an installed Electron exe started with `--remote-debugging-port`; an independent report of the attach route verified in section 3.
+- [Appium 3.x Manifesto: Installation, Driver Management, and Architectural Compatibility, Hakan Tektaş](https://medium.com/@hakantektas/appium-3-x-manifesto-installation-driver-management-and-architectural-compatibility-887d3e3b4945) (2026-01-28) - the most detailed Appium 3 setup article found: supported Node ranges, scoped `--allow-insecure driver:feature` flags, W3C-only requests.
+- [Appium 3: A New Era in Mobile Test Automation, Ümit Özdemir](https://medium.com/@umitozdemirf/appium-3-a-new-era-in-mobile-test-automation-524a77cb19ca) (2025-08-27) - short summary of the Appium 3 breaking changes.
+- [Appium Architecture: Clients, Drivers and Plugins, Lana Begunova](https://medium.com/womenintechnology/appium-architecture-clients-drivers-plugins-74c2ee56870e) (2025-08-30) - lists three community Windows drivers side by side: Windows, Windows FlaUI and NovaWindows; none is maintained by the Appium team.
+- [Tips to integrate WinAppDriver/YWinAppDriver with nodejs/JavaScript webdriver client, Canhua Li](https://licanhua.medium.com/tips-to-integrate-winappdriver-ywinappdriver-with-nodejs-javascript-webdriver-client-de1c974abf06) (2020-11-29) - first-hand reason to avoid the chain Appium -> appium-windows-driver -> WinAppDriver: it is "hard to maintain" and needs exactly matching versions.
+- [Windows Desktop Application Test Automation with WinAppDriver and .NET Core, Enes Kuhn](https://medium.com/maestral-solutions/windows-desktop-application-test-automation-with-winappdriver-and-net-core-86744a5399) (2020-10-23) - shows the exact error WinAppDriver gives without Developer Mode, and that the test breaks if focus moves during the run.
+- [Windows UI Automation tools Comparison, Jagmeet Mehra](https://medium.com/@jagsmehra.092019/windows-ui-automation-tools-comparison-ae9f8a143f27) (2021-08-17) - field report: WinAppDriver slow and flaky on an app with several windows; the author moved to pywinauto.
+- [MS Accessibility Insights: the successor of Inspect, S Chathuranga Jayasinghe](https://schathurangaj.medium.com/ms-accessibility-insights-the-successor-of-inspect-51b0b33a6c7d) (2023-11-10) - the inspector to use for reading AutomationIds and supported patterns; member-only, read only in part.
+- [Automate Print-dialog on the Web, RobinBob](https://medium.com/@robinclick/automate-print-dialog-on-the-web-273f49f71e60) (2022-08-04) - the same two-tool handover on the web: Selenium for the page, pywinauto over UIA for the native dialog.
+- [Automate upload file dialog in web automation, RobinBob](https://medium.com/@robinclick/automate-upload-file-dialog-in-web-automation-b94349db9db1) (2022-07-22) - the Windows open-file dialog addressed by window class `#32770` and control names through AutoIt. A possible way to replace our one real mouse click; not tried.
+- [Settings and help functions Selenium + CEF + Python, Belén Montes](https://bmontes1067.medium.com/settings-and-help-functions-selenium-cef-python-aca644ded57f) (2020-11-02) - a real desktop product with a Chromium front end tested with a web driver plus AutoIt for the OS file dialog.
+- [Hybrid testing, a LabVIEW example, Thomas Zilliox](https://medium.com/@thomas.zilliox/hybrid-testing-a-labview-example-9cb73cd5d143) (2025-08-28) - a native host with an embedded WebView2: the environment variable `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=...` opens the web part to a CDP client while a native library drives the host. Relevant if the product's native windows contain WebView2.
+- [Application of modern testing for testing a modern application, Chris George](https://medium.com/ingeniouslysimple/application-of-modern-testing-for-testing-a-modern-application-9b06b2fdf152) (2018-07-03) - test strategy of a C# + Electron product: end-to-end UI tests kept to a handful of install-and-launch scenarios.
+- A caution: [WindowsDesktop App Automation, Kishor Munot](https://kishor-munot.medium.com/latest-1-windowsdesktop-app-automation-afac0b52980b) (2025-12-06) still chooses WinAppDriver and calls it actively supported, which contradicts the project's own status (section 4). Recent Medium content on this topic is not reliable about tool status.
 
 **CI and stability**
 
