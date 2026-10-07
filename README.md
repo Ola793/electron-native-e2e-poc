@@ -99,5 +99,9 @@ Appium logs go to `logs/`.
 ## CI
 
 `.github/workflows/e2e.yml` runs the suite on a GitHub-hosted `windows-2025` runner on every push and pull
-request: one job for the Electron tests, one for the desktop tests. Reports, traces and Appium logs are
-uploaded as artifacts.
+request: one job for the Electron tests, one for the desktop tests. A third job merges their results into one
+Playwright HTML report and, for the `main` branch, publishes it to GitHub Pages:
+
+**https://ola793.github.io/electron-native-e2e-poc/**
+
+The same report, plus traces, screenshots and Appium logs, is attached to every run as artifacts.

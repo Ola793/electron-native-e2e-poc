@@ -1,5 +1,6 @@
-# Two jobs, because native UI tests need the desktop to themselves: a window opened by a parallel
-# Electron test can cover the native dialog a desktop test is working with.
+# Two test jobs, because native UI tests need the desktop to themselves: a window opened by a parallel
+# Electron test can cover the native dialog a desktop test is working with. A third job merges their
+# reports into one HTML report and publishes it to GitHub Pages.
 name: e2e
 
 on:
@@ -26,13 +27,19 @@ jobs:
       - run: npm run test:electron
         env:
           CI: "true"
+          BLOB_NAME: electron
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
-          name: report-electron
-          path: |
-            playwright-report/
-            playwright-artifacts/
+          name: blob-electron
+          path: blob-report/
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: artifacts-electron
+          path: playwright-artifacts/
+          if-no-files-found: ignore
           retention-days: 14
 
   desktop:
@@ -55,12 +62,59 @@ jobs:
       - run: npm run test:desktop
         env:
           CI: "true"
+          BLOB_NAME: desktop
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
-          name: report-desktop
+          name: blob-desktop
+          path: blob-report/
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: artifacts-desktop
           path: |
-            playwright-report/
             playwright-artifacts/
             logs/
+          if-no-files-found: ignore
           retention-days: 14
+
+  report:
+    name: Merged report
+    needs: [electron, desktop]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: blob-*
+          path: blob-reports
+          merge-multiple: true
+      - run: npx playwright merge-reports --reporter html ./blob-reports
+      - uses: actions/upload-artifact@v7
+        with:
+          name: report
+          path: playwright-report/
+          retention-days: 14
+      # The report of the main branch is published; pull requests only get the artifact above.
+      - uses: actions/upload-pages-artifact@v5
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
+          path: playwright-report/
+      - id: deploy
+        uses: actions/deploy-pages@v5
+        if: ${{ github.event_name != 'pull_request' }}

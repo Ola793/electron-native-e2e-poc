@@ -8,7 +8,11 @@ export default defineConfig({
   outputDir: "./playwright-artifacts",
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
-  reporter: [["html", { open: "never" }], ["list"]],
+  // CI jobs write blob reports that a later job merges into one HTML report and publishes to GitHub Pages.
+  // BLOB_NAME keeps the two jobs' files apart; locally the HTML report is written directly.
+  reporter: isCI
+    ? [["blob", { fileName: `report-${process.env.BLOB_NAME ?? "run"}.zip` }], ["list"]]
+    : [["html", { open: "never" }], ["list"]],
 
   timeout: 60_000,
   expect: {
